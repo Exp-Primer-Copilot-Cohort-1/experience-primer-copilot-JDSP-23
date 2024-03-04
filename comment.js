@@ -1,68 +1,69 @@
-//create web server
+// Create web server
+// This is a simple web server to handle comments
+// The server will respond to any request with a simple HTML page
+// that lists all the comments that have been posted so far
+// and provides a form to enter a new comment.
+
+// Load the http module to create an http server.
 var http = require('http');
-var url = require('url');
 var fs = require('fs');
-var mysql = require('mysql');
-var express = require('express');
-var bodyParser = require('body-parser');
+var url = require('url');
+var querystring = require('querystring');
+var path = require('path');
+var comments = require('./comments');
 
-var app = express();
-app.use(express.static('public'));
-app.use(bodyParser.urlencoded({extended: false}));
-
-var connection = mysql.createConnection({
-    host: 'localhost',
-    user: 'root',
-    password: '1234',
-    database: 'comment'
-});
-connection.connect();
-
-app.get('/comment', function(req, res){
-    fs.readFile('comment.html', 'utf8', function(error, data){
-        connection.query('SELECT * FROM comment', function(error, results, fields){
-            if(error) throw error;
-            res.send(data);
-        });
+// Configure our HTTP server to respond with Hello World to all requests.
+var server = http.createServer(function (request, response) {
+  // Parse the request containing file name
+  var pathname = url.parse(request.url).pathname;
+  var query = url.parse(request.url).query;
+  var queryObj = querystring.parse(query);
+  var filename = "." + pathname;
+  var ext = path.extname(filename);
+  var type = '';
+  switch (ext) {
+    case '.html':
+      type = 'text/html';
+      break;
+    case '.js':
+      type = 'text/javascript';
+      break;
+    case '.css':
+      type = 'text/css';
+      break;
+    case '.json':
+      type = 'application/json';
+      break;
+    case '.png':
+      type = 'image/png';
+      break;
+    case '.jpg':
+      type = 'image/jpg';
+      break;
+    case '.wav':
+      type = 'audio/wav';
+      break;
+  }
+  if (filename === './') {
+    filename = './index.html';
+  }
+  if (queryObj['comment'] !== undefined) {
+    comments.addComment(queryObj['comment']);
+  }
+  if (pathname === '/getComments') {
+    response.writeHead(200, { 'Content-Type': 'application/json' });
+    response.end(JSON.stringify(comments.getComments()));
+  } else {
+    fs.readFile(filename, function (err, data) {
+      if (err) {
+        response.writeHead(404, { 'Content-Type': 'text/html' });
+        return response.end("404 Not Found");
+      }
+      response.writeHead(200, { 'Content-Type': type });
+      response.write(data);
+      return response.end();
     });
+  }
 });
 
-app.post('/comment', function(req, res){
-    var comment = req.body.comment;
-    var name = req.body.name;
-    var password = req.body.password;
-    connection.query('INSERT INTO comment (name, password, comment) VALUES(?, ?, ?)', [name, password, comment], function(error, results, fields){
-        if(error) throw error;
-        res.redirect('/comment');
-    });
-});
-
-app.get('/comment/delete/:id', function(req, res){
-    connection.query('SELECT * FROM comment WHERE id=?', [req.params.id], function(error, results, fields){
-        if(error) throw error;
-        res.render('delete', {id: req.params.id, comment: results[0]});
-    });
-});
-
-app.post('/comment/delete/:id', function(req, res){
-    connection.query('SELECT * FROM comment WHERE id=?', [req.params.id], function(error, results, fields){
-        if(req.body.password === results[0].password){
-            connection.query('DELETE FROM comment WHERE id=?', [req.params.id], function(error, results, fields){
-                if(error) throw error;
-                res.redirect('/comment');
-            });
-        } else {
-            res.send('password is incorrect');
-        }
-    });
-});
-
-app.get('/comment/modify/:id', function(req, res){
-    connection.query('SELECT * FROM comment WHERE id=?', [req.params.id], function(error, results, fields){
-        if(error) throw error;
-        res.render('modify', {id: req.params.id, comment: results[0]});
-    });
-});
-
-app.post('/comment/modify/:id', function(req, res){
-    connection.query('
+// Listen on port 8080, IP defaults to
